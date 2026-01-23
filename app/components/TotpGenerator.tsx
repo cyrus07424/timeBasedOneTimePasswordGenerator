@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as OTPAuth from 'otpauth';
 
 export default function TotpGenerator() {
@@ -9,8 +9,9 @@ export default function TotpGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [error, setError] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
-  const generateToken = useCallback(() => {
+  const generateToken = () => {
     if (!secret) {
       setError('秘密キーを入力してください');
       return;
@@ -34,13 +35,13 @@ export default function TotpGenerator() {
       setError('トークン生成エラー: 秘密キーが無効です');
       console.error(err);
     }
-  }, [secret]);
+  };
 
   useEffect(() => {
-    if (!isGenerating) return;
+    if (!isGenerating || !secret) return;
 
-    // Track the current 30-second period
-    let currentPeriod = Math.floor(Date.now() / 1000 / 30);
+    // Use ref to track the current 30-second period across re-renders
+    const currentPeriodRef = { current: Math.floor(Date.now() / 1000 / 30) };
 
     const interval = setInterval(() => {
       const now = Math.floor(Date.now() / 1000);
@@ -50,9 +51,22 @@ export default function TotpGenerator() {
       setTimeRemaining(remaining);
       
       // Only regenerate token when entering a new 30-second period
-      if (newPeriod !== currentPeriod) {
-        generateToken();
-        currentPeriod = newPeriod;
+      if (newPeriod !== currentPeriodRef.current) {
+        try {
+          const totp = new OTPAuth.TOTP({
+            issuer: 'TOTP Generator',
+            label: 'User',
+            algorithm: 'SHA1',
+            digits: 6,
+            period: 30,
+            secret: secret,
+          });
+          setToken(totp.generate());
+          currentPeriodRef.current = newPeriod;
+        } catch (err) {
+          setError('トークン生成エラー: 秘密キーが無効です');
+          console.error(err);
+        }
       }
     }, 1000);
 
@@ -62,7 +76,7 @@ export default function TotpGenerator() {
     setTimeRemaining(remaining);
 
     return () => clearInterval(interval);
-  }, [isGenerating, generateToken]);
+  }, [isGenerating, secret]);
 
   const handlePasteFromClipboard = async () => {
     try {
@@ -78,10 +92,8 @@ export default function TotpGenerator() {
   const handleCopyToken = async () => {
     try {
       await navigator.clipboard.writeText(token);
-      // Show a temporary success message
-      const originalToken = token;
-      setToken('コピーしました！');
-      setTimeout(() => setToken(originalToken), 1000);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 1000);
     } catch (err) {
       setError('クリップボードへのコピーに失敗しました');
       console.error(err);
@@ -140,7 +152,7 @@ export default function TotpGenerator() {
             onClick={handleCopyToken}
             className="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
           >
-            クリップボードにコピー
+            {copyFeedback ? 'コピーしました！' : 'クリップボードにコピー'}
           </button>
         </div>
       )}
