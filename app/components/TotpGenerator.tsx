@@ -10,6 +10,7 @@ export default function TotpGenerator() {
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [error, setError] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const currentPeriodRef = useRef(Math.floor(Date.now() / 1000 / 30));
 
   const generateToken = () => {
     if (!secret) {
@@ -40,8 +41,8 @@ export default function TotpGenerator() {
   useEffect(() => {
     if (!isGenerating || !secret) return;
 
-    // Use ref to track the current 30-second period across re-renders
-    const currentPeriodRef = { current: Math.floor(Date.now() / 1000 / 30) };
+    // Update the current period ref when starting
+    currentPeriodRef.current = Math.floor(Date.now() / 1000 / 30);
 
     const interval = setInterval(() => {
       const now = Math.floor(Date.now() / 1000);
@@ -78,6 +79,13 @@ export default function TotpGenerator() {
     return () => clearInterval(interval);
   }, [isGenerating, secret]);
 
+  useEffect(() => {
+    if (!copyFeedback) return;
+    
+    const timeoutId = setTimeout(() => setCopyFeedback(false), 1000);
+    return () => clearTimeout(timeoutId);
+  }, [copyFeedback]);
+
   const handlePasteFromClipboard = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -93,7 +101,6 @@ export default function TotpGenerator() {
     try {
       await navigator.clipboard.writeText(token);
       setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 1000);
     } catch (err) {
       setError('クリップボードへのコピーに失敗しました');
       console.error(err);
