@@ -1,11 +1,14 @@
+import TotpGenerator from './components/TotpGenerator';
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-2xl mx-auto px-4">
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
-            Next.js Template
+            Time-based One-Time Password Generator
           </h1>
+          <TotpGenerator />
         </div>
       </div>
       <footer className="text-center text-gray-400 mt-8">
