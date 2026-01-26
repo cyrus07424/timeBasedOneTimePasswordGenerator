@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import jsQR from 'jsqr';
+import { extractSecretFromUri } from '../utils/totp';
 
 interface QRCodeUploaderProps {
   onSecretExtracted: (secret: string) => void;
@@ -79,23 +80,6 @@ export default function QRCodeUploader({ onSecretExtracted, onError }: QRCodeUpl
     } catch (err) {
       onError('QRコードの読み取りに失敗しました');
       console.error(err);
-    }
-  };
-
-  const extractSecretFromUri = (uri: string): string | null => {
-    try {
-      // Parse otpauth:// URI
-      // Format: otpauth://totp/[label]?secret=[SECRET]&issuer=[ISSUER]
-      if (!uri.startsWith('otpauth://')) {
-        return null;
-      }
-
-      const url = new URL(uri);
-      const secret = url.searchParams.get('secret');
-      return secret;
-    } catch (err) {
-      console.error('URI parsing error:', err);
-      return null;
     }
   };
 

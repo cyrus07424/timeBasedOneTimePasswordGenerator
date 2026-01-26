@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import * as OTPAuth from 'otpauth';
 import QRCodeUploader from './QRCodeUploader';
 import WebcamQRScanner from './WebcamQRScanner';
+import { createTotpConfig } from '../utils/totp';
 
 export default function TotpGenerator() {
   const [secret, setSecret] = useState('');
@@ -23,14 +24,7 @@ export default function TotpGenerator() {
 
     try {
       setError('');
-      const totp = new OTPAuth.TOTP({
-        issuer: 'TOTP Generator',
-        label: 'User',
-        algorithm: 'SHA1',
-        digits: 6,
-        period: 30,
-        secret: secret,
-      });
+      const totp = new OTPAuth.TOTP(createTotpConfig(secret));
 
       const currentToken = totp.generate();
       setToken(currentToken);
@@ -57,14 +51,7 @@ export default function TotpGenerator() {
       // Only regenerate token when entering a new 30-second period
       if (newPeriod !== currentPeriodRef.current) {
         try {
-          const totp = new OTPAuth.TOTP({
-            issuer: 'TOTP Generator',
-            label: 'User',
-            algorithm: 'SHA1',
-            digits: 6,
-            period: 30,
-            secret: secret,
-          });
+          const totp = new OTPAuth.TOTP(createTotpConfig(secret));
           setToken(totp.generate());
           currentPeriodRef.current = newPeriod;
         } catch (err) {
@@ -115,14 +102,7 @@ export default function TotpGenerator() {
     setError('');
     // Automatically generate token with the extracted secret
     try {
-      const totp = new OTPAuth.TOTP({
-        issuer: 'TOTP Generator',
-        label: 'User',
-        algorithm: 'SHA1',
-        digits: 6,
-        period: 30,
-        secret: extractedSecret,
-      });
+      const totp = new OTPAuth.TOTP(createTotpConfig(extractedSecret));
       const currentToken = totp.generate();
       setToken(currentToken);
       setIsGenerating(true);

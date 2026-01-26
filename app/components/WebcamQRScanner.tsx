@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import jsQR from 'jsqr';
+import { extractSecretFromUri } from '../utils/totp';
 
 interface WebcamQRScannerProps {
   onSecretExtracted: (secret: string) => void;
@@ -15,21 +16,7 @@ export default function WebcamQRScanner({ onSecretExtracted, onError, onClose }:
   const [isScanning, setIsScanning] = useState(true);
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (!isScanning) return;
-
-    scanIntervalRef.current = setInterval(() => {
-      captureAndScan();
-    }, 500); // Scan every 500ms
-
-    return () => {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-      }
-    };
-  }, [isScanning]);
-
-  const captureAndScan = () => {
+  const captureAndScan = useCallback(() => {
     const webcam = webcamRef.current;
     if (!webcam) return;
 
@@ -63,22 +50,21 @@ export default function WebcamQRScanner({ onSecretExtracted, onError, onClose }:
     };
 
     img.src = imageSrc;
-  };
+  }, [onSecretExtracted, onError, onClose]);
 
-  const extractSecretFromUri = (uri: string): string | null => {
-    try {
-      if (!uri.startsWith('otpauth://')) {
-        return null;
+  useEffect(() => {
+    if (!isScanning) return;
+
+    scanIntervalRef.current = setInterval(() => {
+      captureAndScan();
+    }, 1000); // Scan every 1000ms (reduced from 500ms for better performance)
+
+    return () => {
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
       }
-
-      const url = new URL(uri);
-      const secret = url.searchParams.get('secret');
-      return secret;
-    } catch (err) {
-      console.error('URI parsing error:', err);
-      return null;
-    }
-  };
+    };
+  }, [isScanning, captureAndScan]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -97,7 +83,7 @@ export default function WebcamQRScanner({ onSecretExtracted, onError, onClose }:
             screenshotFormat="image/jpeg"
             className="w-full"
             videoConstraints={{
-              facingMode: 'environment', // Use rear camera on mobile
+              facingMode: { ideal: 'environment' }, // Prefer rear camera with fallback
             }}
           />
         </div>
