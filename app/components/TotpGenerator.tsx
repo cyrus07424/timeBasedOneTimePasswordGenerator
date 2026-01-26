@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import * as OTPAuth from 'otpauth';
+import QRCodeUploader from './QRCodeUploader';
+import WebcamQRScanner from './WebcamQRScanner';
+import { createTotpConfig } from '../utils/totp';
 
 export default function TotpGenerator() {
   const [secret, setSecret] = useState('');
@@ -10,6 +13,7 @@ export default function TotpGenerator() {
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [error, setError] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [showWebcamScanner, setShowWebcamScanner] = useState(false);
   const currentPeriodRef = useRef(Math.floor(Date.now() / 1000 / 30));
 
   const generateToken = () => {
@@ -20,14 +24,7 @@ export default function TotpGenerator() {
 
     try {
       setError('');
-      const totp = new OTPAuth.TOTP({
-        issuer: 'TOTP Generator',
-        label: 'User',
-        algorithm: 'SHA1',
-        digits: 6,
-        period: 30,
-        secret: secret,
-      });
+      const totp = new OTPAuth.TOTP(createTotpConfig(secret));
 
       const currentToken = totp.generate();
       setToken(currentToken);
@@ -54,14 +51,7 @@ export default function TotpGenerator() {
       // Only regenerate token when entering a new 30-second period
       if (newPeriod !== currentPeriodRef.current) {
         try {
-          const totp = new OTPAuth.TOTP({
-            issuer: 'TOTP Generator',
-            label: 'User',
-            algorithm: 'SHA1',
-            digits: 6,
-            period: 30,
-            secret: secret,
-          });
+          const totp = new OTPAuth.TOTP(createTotpConfig(secret));
           setToken(totp.generate());
           currentPeriodRef.current = newPeriod;
         } catch (err) {
@@ -107,6 +97,34 @@ export default function TotpGenerator() {
     }
   };
 
+  const handleSecretExtracted = (extractedSecret: string) => {
+    setSecret(extractedSecret);
+    setError('');
+    // Automatically generate token with the extracted secret
+    try {
+      const totp = new OTPAuth.TOTP(createTotpConfig(extractedSecret));
+      const currentToken = totp.generate();
+      setToken(currentToken);
+      setIsGenerating(true);
+    } catch (err) {
+      setError('トークン生成エラー: 秘密キーが無効です');
+      console.error(err);
+    }
+  };
+
+  const handleQRError = (errorMessage: string) => {
+    setError(errorMessage);
+  };
+
+  const handleOpenWebcamScanner = () => {
+    setShowWebcamScanner(true);
+    setError('');
+  };
+
+  const handleCloseWebcamScanner = () => {
+    setShowWebcamScanner(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -127,6 +145,24 @@ export default function TotpGenerator() {
             className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
           >
             クリップボードから貼り付け
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-sm font-medium text-gray-700 mb-2">
+          またはQRコードから読み込む
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <QRCodeUploader 
+            onSecretExtracted={handleSecretExtracted}
+            onError={handleQRError}
+          />
+          <button
+            onClick={handleOpenWebcamScanner}
+            className="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+          >
+            カメラでスキャン
           </button>
         </div>
       </div>
@@ -162,6 +198,14 @@ export default function TotpGenerator() {
             {copyFeedback ? 'コピーしました！' : 'クリップボードにコピー'}
           </button>
         </div>
+      )}
+
+      {showWebcamScanner && (
+        <WebcamQRScanner
+          onSecretExtracted={handleSecretExtracted}
+          onError={handleQRError}
+          onClose={handleCloseWebcamScanner}
+        />
       )}
     </div>
   );
