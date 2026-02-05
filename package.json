@@ -11,7 +11,7 @@
   "dependencies": {
     "jsqr": "^1.4.0",
     "next": "16.1.6",
-    "otpauth": "^9.4.1",
+    "otpauth": "^9.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.2.4",
     "react-webcam": "^7.2.0"
