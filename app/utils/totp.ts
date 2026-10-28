@@ -1,18 +1,22 @@
 export const extractSecretFromUri = (uri: string): string | null => {
   try {
-    // Parse otpauth:// URI
-    // Format: otpauth://totp/[label]?secret=[SECRET]&issuer=[ISSUER]
-    if (!uri.startsWith('otpauth://')) {
+    const trimmedUri = uri.trim();
+    if (!/^otpauth:\/\//i.test(trimmedUri)) {
       return null;
     }
 
-    const url = new URL(uri);
+    const url = new URL(trimmedUri);
     const secret = url.searchParams.get('secret');
-    return secret;
+    return secret?.trim() || null;
   } catch (err) {
     console.error('URI parsing error:', err);
     return null;
   }
+};
+
+export const normalizeSecretInput = (input: string): string => {
+  const trimmedInput = input.trim();
+  return extractSecretFromUri(trimmedInput) ?? trimmedInput;
 };
 
 export const createTotpConfig = (secret: string) => ({

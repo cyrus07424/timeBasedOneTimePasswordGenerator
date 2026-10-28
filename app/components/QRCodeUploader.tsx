@@ -95,7 +95,7 @@ export default function QRCodeUploader({ onSecretExtracted, onError }: QRCodeUpl
       />
       <label
         htmlFor="qr-upload"
-        className="w-full px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors cursor-pointer inline-block text-center"
+        className="inline-block w-full cursor-pointer rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-center text-sm font-semibold text-violet-800 transition hover:bg-violet-100 focus-within:ring-4 focus-within:ring-violet-100"
       >
         QRコード画像をアップロード
       </label>

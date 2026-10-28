@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import * as OTPAuth from 'otpauth';
 import QRCodeUploader from './QRCodeUploader';
 import WebcamQRScanner from './WebcamQRScanner';
-import { createTotpConfig } from '../utils/totp';
+import { createTotpConfig, normalizeSecretInput } from '../utils/totp';
 
 export default function TotpGenerator() {
   const [secret, setSecret] = useState('');
@@ -12,19 +12,25 @@ export default function TotpGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [error, setError] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [isSecretVisible, setIsSecretVisible] = useState(false);
   const [showWebcamScanner, setShowWebcamScanner] = useState(false);
+  const secretInputRef = useRef<HTMLInputElement>(null);
   const currentPeriodRef = useRef(Math.floor(Date.now() / 1000 / 30));
 
   const generateToken = () => {
-    if (!secret) {
+    const normalizedSecret = normalizeSecretInput(secret);
+    if (!normalizedSecret) {
       setError('秘密キーを入力してください');
       return;
     }
 
     try {
       setError('');
-      const totp = new OTPAuth.TOTP(createTotpConfig(secret));
+      setStatusMessage('');
+      setSecret(normalizedSecret);
+      const totp = new OTPAuth.TOTP(createTotpConfig(normalizedSecret));
 
       const currentToken = totp.generate();
       setToken(currentToken);
@@ -77,20 +83,46 @@ export default function TotpGenerator() {
   }, [copyFeedback]);
 
   const handlePasteFromClipboard = async () => {
+    setError('');
+    setStatusMessage('');
+
     try {
+      if (!navigator.clipboard?.readText) {
+        throw new Error('Clipboard API is unavailable');
+      }
+
       const text = await navigator.clipboard.readText();
-      setSecret(text);
-      setError('');
-    } catch (err) {
-      setError('クリップボードからの読み取りに失敗しました');
-      console.error(err);
+      if (!text.trim()) {
+        setStatusMessage('クリップボードが空です。秘密キーをコピーしてから貼り付けてください。');
+        secretInputRef.current?.focus();
+        return;
+      }
+      setSecret(normalizeSecretInput(text));
+      setStatusMessage('クリップボードから貼り付けました。');
+    } catch {
+      secretInputRef.current?.focus();
+      setStatusMessage('入力欄にフォーカスしました。Ctrl+V（Macは⌘V）で貼り付けてください。');
     }
+  };
+
+  const handleSecretPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    setSecret(normalizeSecretInput(event.clipboardData.getData('text')));
+    setError('');
+    setStatusMessage('貼り付けました。');
+  };
+
+  const handleSecretChange = (value: string) => {
+    setSecret(value);
+    setError('');
+    setStatusMessage('');
   };
 
   const handleCopyToken = async () => {
     try {
       await navigator.clipboard.writeText(token);
       setCopyFeedback(true);
+      setStatusMessage('トークンをコピーしました。');
     } catch (err) {
       setError('クリップボードへのコピーに失敗しました');
       console.error(err);
@@ -98,11 +130,13 @@ export default function TotpGenerator() {
   };
 
   const handleSecretExtracted = (extractedSecret: string) => {
-    setSecret(extractedSecret);
+    const normalizedSecret = normalizeSecretInput(extractedSecret);
+    setSecret(normalizedSecret);
     setError('');
+    setStatusMessage('');
     // Automatically generate token with the extracted secret
     try {
-      const totp = new OTPAuth.TOTP(createTotpConfig(extractedSecret));
+      const totp = new OTPAuth.TOTP(createTotpConfig(normalizedSecret));
       const currentToken = totp.generate();
       setToken(currentToken);
       setIsGenerating(true);
@@ -126,32 +160,74 @@ export default function TotpGenerator() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <label htmlFor="secret" className="block text-sm font-medium text-gray-700">
-          秘密キー
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="secret"
-            type="password"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="秘密キーを入力してください"
-          />
-          <button
-            onClick={handlePasteFromClipboard}
-            className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-          >
-            クリップボードから貼り付け
-          </button>
+    <div className="space-y-7">
+      <section className="space-y-3">
+        <div>
+          <label htmlFor="secret" className="block text-sm font-semibold text-slate-800">
+            秘密キー
+          </label>
+          <p className="mt-1 text-sm text-slate-500">
+            認証アプリに表示されたキー、または otpauth:// URI を入力できます。
+          </p>
         </div>
-      </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <input
+              ref={secretInputRef}
+              id="secret"
+              type={isSecretVisible ? 'text' : 'password'}
+              value={secret}
+              onChange={(e) => handleSecretChange(e.target.value)}
+              onPaste={handleSecretPaste}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') generateToken();
+              }}
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby="secret-help"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 pr-24 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              placeholder="例: JBSWY3DPEHPK3PXP"
+            />
+            <button
+              type="button"
+              onClick={() => setIsSecretVisible((visible) => !visible)}
+              className="absolute inset-y-0 right-2 my-auto h-9 rounded-lg px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              aria-label={isSecretVisible ? '秘密キーを隠す' : '秘密キーを表示'}
+            >
+              {isSecretVisible ? '隠す' : '表示'}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={handlePasteFromClipboard}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 sm:shrink-0"
+          >
+            貼り付け
+          </button>
+          {secret && (
+            <button
+              type="button"
+              onClick={() => {
+                setSecret('');
+                setStatusMessage('');
+                setError('');
+                setIsGenerating(false);
+                setToken('');
+              }}
+              className="rounded-xl px-3 py-3 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 sm:shrink-0"
+            >
+              クリア
+            </button>
+          )}
+        </div>
+        <p id="secret-help" className="text-xs leading-5 text-slate-500">
+          貼り付けボタンで読み取れない場合は、入力欄を選択して Ctrl+V（Macは⌘V）をお使いください。
+        </p>
+      </section>
 
-      <div className="space-y-2">
-        <div className="text-sm font-medium text-gray-700 mb-2">
-          またはQRコードから読み込む
+      <section className="space-y-3">
+        <div className="text-sm font-semibold text-slate-800">
+          QRコードから設定
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <QRCodeUploader 
@@ -159,45 +235,66 @@ export default function TotpGenerator() {
             onError={handleQRError}
           />
           <button
+            type="button"
             onClick={handleOpenWebcamScanner}
-            className="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+            className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-100"
           >
             カメラでスキャン
           </button>
         </div>
-      </div>
+      </section>
 
       {error && (
-        <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {error}
+        </div>
+      )}
+      {!error && statusMessage && (
+        <div role="status" aria-live="polite" className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          {statusMessage}
         </div>
       )}
 
       <button
+        type="button"
         onClick={generateToken}
-        className="w-full px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors font-semibold"
+        className="w-full rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-200"
       >
-        トークン生成
+        {isGenerating ? 'トークンを更新' : 'トークンを生成'}
       </button>
 
       {isGenerating && token && (
-        <div className="space-y-4 p-6 bg-gray-50 rounded-lg">
+        <section aria-label="生成されたワンタイムパスワード" className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-7">
           <div className="text-center">
-            <div className="text-sm text-gray-600 mb-2">生成されたトークン</div>
-            <div className="text-4xl font-mono font-bold text-gray-800 mb-2 tracking-wider">
+            <div className="mb-3 text-sm font-semibold text-slate-600">ワンタイムパスワード</div>
+            <div aria-live="polite" aria-atomic="true" className="mb-3 break-all font-mono text-4xl font-bold tracking-[0.2em] text-slate-900 sm:text-5xl">
               {token}
             </div>
-            <div className="text-sm text-gray-500">
-              {timeRemaining}秒後に更新
+            <div className="text-sm text-slate-500">
+              残り <span className="font-semibold tabular-nums text-slate-700">{timeRemaining}秒</span>
+            </div>
+            <div
+              className="mx-auto mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-slate-200"
+              role="progressbar"
+              aria-label="トークンの有効時間"
+              aria-valuemin={0}
+              aria-valuemax={30}
+              aria-valuenow={timeRemaining}
+            >
+              <div
+                className="h-full rounded-full bg-blue-500 transition-[width] duration-1000"
+                style={{ width: `${(timeRemaining / 30) * 100}%` }}
+              />
             </div>
           </div>
           <button
+            type="button"
             onClick={handleCopyToken}
-            className="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+            className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200"
           >
-            {copyFeedback ? 'コピーしました！' : 'クリップボードにコピー'}
+            {copyFeedback ? 'コピーしました' : 'トークンをコピー'}
           </button>
-        </div>
+        </section>
       )}
 
       {showWebcamScanner && (
